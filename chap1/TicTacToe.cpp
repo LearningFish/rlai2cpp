@@ -18,6 +18,7 @@ const int WinnerO = -1;
 const int Tie = 0;
 
 static unsigned int initial_state_hash = -1;
+default_random_engine global_generator;
 
 class State {
 private:
@@ -154,7 +155,6 @@ private:
 	double step_size_;
 	double explore_rate_;
 	vector<const State*> state_ptrs_;
-	default_random_engine generator_;
 	uniform_real_distribution<double> unif_real_;
 public:
 	AIPlayer(int arole, unordered_map<unsigned int, State>* all_states, double step_size = 0.1, double explore_rate = 0.1)
@@ -203,9 +203,9 @@ public:
 			}
 		}
 		// check random pick
-		if (unif_real_(generator_)<explore_rate_) {
+		if (unif_real_(global_generator)<explore_rate_) {
 			uniform_int_distribution<int> unif_int(0, possible_positions.size() - 1);
-			auto pos = unif_int(generator_);
+			auto pos = unif_int(global_generator);
 			state_ptrs_.clear();
 			return vector<int>({ possible_positions[pos].first,possible_positions[pos].second,role_ });
 		}
