@@ -31,7 +31,7 @@ public:
 	State(const vector<int>& board) :done_(false), win_(false) { board_ = board; hash_ = hash(board_); }
 	State(const vector<int>&& board) :done_(false), win_(false) { board_ = move(board); hash_ = hash(board_); }
 	State(const State&& t) { done_ = t.done_; win_ = t.win_; board_ = move(t.board_); hash_ = t.hash(); }
-	State& operator = (const State&& t) { if (this == &t) return *this; done_ = t.done_; win_ = t.win_; board_ = move(t.board_); hash_ = t.hash(); }
+	State& operator = (const State&& t) { if (this != &t) { done_ = t.done_; win_ = t.win_; board_ = move(t.board_); hash_ = t.hash(); } return *this; }
 	static int hash(const vector<int>& vec) {
 		unsigned int seed = 0;
 		for (auto &x : vec) seed ^= std::hash<int>{}(x)+0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -141,7 +141,7 @@ public:
 	virtual int  role() = 0;
 	virtual void role(int role) = 0;
 	virtual void state(const State* pstate) = 0;
-	virtual void reward(int r) = 0;
+	virtual void reward(double r) = 0;
 	virtual vector<int> action() = 0;
 	virtual unordered_map<unsigned int, double> value_table() const = 0;
 	virtual void value_table(const unordered_map<unsigned int, double>& vtable) = 0;
@@ -176,11 +176,11 @@ public:
 		}
 	}
 	void state(const State* pstate) { state_ptrs_.push_back(pstate); }
-	void reward(int r)
+	void reward(double r)
 	{
 		// update reward, learning
 		if (state_ptrs_.empty()) return;
-		int target = r;
+		double target = r;
 		for (auto rit = state_ptrs_.rbegin(); rit != state_ptrs_.rend(); ++rit) {
 			auto lastest_state = *rit;
 			value_table_[lastest_state->hash()] += step_size_ * (target - value_table_[lastest_state->hash()]);
@@ -213,7 +213,7 @@ public:
 		// pick the largest value
 		int max_pos = -1;
 		double max_value = INT64_MIN;
-		for (int i = 0; i<possible_state_ptrs.size(); i++) {
+		for (unsigned int i = 0; i<possible_state_ptrs.size(); i++) {
 			auto ps = possible_state_ptrs[i];
 			double value = value_table_[ps->hash()];
 			if (max_value<value) {
@@ -237,7 +237,7 @@ public:
 	int  role() { return role_; }
 	void role(int role) { role_ = role; }
 	void state(const State* pstate) { current_state_ = pstate; }
-	void reward(int r) {}
+	void reward(double r) {}
 	vector<int> action()
 	{
 		int pos;
@@ -371,8 +371,8 @@ public:
 int main()
 {
 	TicTacToe tic;
-	tic.train();
-	tic.compete();
+	tic.train(100000);
+	tic.compete(1000);
 	tic.play();
 	return 0;
 }
