@@ -96,11 +96,13 @@ public:
 			for (int r = 0; r<BOARD_DIM; r++) {
 				for (int c = 0; c<BOARD_DIM; c++) {
 					if (current_state.value(r, c) == BlankCell) {
+						auto next_hash_value = State::next_state_hash(current_state, r, c, player);
+						if (all_states.find(next_hash_value) != all_states.end()) continue;
+						if (all_states.size() % 100 == 0) cout << "# of States = " << all_states.size() << endl;
 						auto next_state = State::create_next(current_state, r, c, player);
 						auto done_win = State::check_done_win(next_state);
 						next_state.done(done_win.first);
 						next_state.win(done_win.second);
-						auto next_hash_value = next_state.hash();
 						all_states[next_hash_value] = move(next_state);
 						const auto &next_state_ref = all_states[next_hash_value];
 						if (!next_state_ref.done()) create_from_current(next_state_ref, -player);
@@ -112,6 +114,9 @@ public:
 		initial_state_hash = init_state.hash();
 		all_states[initial_state_hash] = move(init_state);
 		create_from_current(all_states[initial_state_hash], PlayerX);
+
+		cout << "==================================================================" << endl;
+		cout << "Total # of states =" << all_states.size() << endl;
 		return all_states;
 	}
 };
