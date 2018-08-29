@@ -9,7 +9,7 @@
 using namespace std;
 
 const int BOARD_DIM = 3;
-const int BOARD_SIZE = BOARD_DIM*BOARD_DIM;
+const int BOARD_SIZE = BOARD_DIM * BOARD_DIM;
 const int BlankCell = 0;
 const int PlayerX = 1;
 const int PlayerO = -1;
@@ -17,48 +17,51 @@ const int WinnerX = 1;
 const int WinnerO = -1;
 const int Tie = 0;
 
-static unsigned int initial_state_hash = -1;
+static string initial_state_hash = "";
 default_random_engine global_generator;
 
 class State {
 private:
-	bool done_;
-	int win_;
-	unsigned int hash_;
+	bool done_ = false;
+	int win_   = Tie;
+	string hash_;
 	vector<int> board_;
 public:
 	State() = default;
-	State(const vector<int>& board) :done_(false), win_(false) { board_ = board; hash_ = hash(board_); }
-	State(const vector<int>&& board) :done_(false), win_(false) { board_ = move(board); hash_ = hash(board_); }
+	State(const vector<int>& board) { board_ = board; hash_ = hash(board_); }
+	State(const vector<int>&& board) { board_ = move(board); hash_ = hash(board_); }
 	State(const State&& t) { done_ = t.done_; win_ = t.win_; board_ = move(t.board_); hash_ = t.hash(); }
-	State& operator = (const State&& t) { if (this != &t) { done_ = t.done_; win_ = t.win_; board_ = move(t.board_); hash_ = t.hash(); } return *this; }
-	static int hash(const vector<int>& vec) {
-		unsigned int seed = 0;
-		for (auto &x : vec) seed ^= std::hash<int>{}(x)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+	State& operator = (const State&& t) {
+		if (this != &t) { done_ = t.done_; win_ = t.win_; board_ = move(t.board_); hash_ = t.hash(); }
+		return *this;
+	}
+	static string hash(const vector<int>& vec) {
+		string seed;
+		for (auto &x : vec) seed.push_back(x + 1 + '0');
 		return seed;
 	}
 	inline bool done() const { return done_; }
 	inline void done(bool d) { done_ = d; }
 	inline void win(int w) { win_ = w; }
 	inline int  win() const { return win_; }
-	inline unsigned int hash() const { return hash_; }
+	inline string hash() const { return hash_; }
 	inline int value(int row, int col) const { return board_[rowcol2pos(row, col)]; }
 	inline int value(int pos) const { return board_[pos]; }
-	static inline int rowcol2pos(int row, int col) { return row*BOARD_DIM + col; }
+	static inline int rowcol2pos(int row, int col) { return row * BOARD_DIM + col; }
 	static inline pair<int, int> pos2rowcol(int pos) { return make_pair(pos / BOARD_DIM, pos%BOARD_DIM); }
-	static State create_next(const State& t, int row, int col, int player) {
+	static State* create_next(const State& t, int row, int col, int player) {
 		auto new_board = t.board_;
 		new_board[rowcol2pos(row, col)] = player;
-		return State(move(new_board));
+		return new State(move(new_board));
 	}
-	static int next_state_hash(const State& t, int row, int col, int player) {
+	static string next_state_hash(const State& t, int row, int col, int player) {
 		auto player_backup = t.value(row, col);
 		const_cast<State&>(t).board_[rowcol2pos(row, col)] = player;
 		auto hash_value = hash(t.board_);
 		const_cast<State&>(t).board_[rowcol2pos(row, col)] = player_backup;
 		return hash_value;
 	}
-	static pair<bool,int> check_done_win(const State& t) {
+	static pair<bool, int> check_done_win(const State& t) {
 		vector<int> scores;
 		//rows, cols
 		for (int r = 0; r<BOARD_DIM; r++) {
@@ -89,34 +92,33 @@ public:
 		if (tot == BOARD_SIZE) return make_pair(true, Tie); //Tie
 		return make_pair(false, Tie); // gaming is not done.
 	}
-	static unordered_map<unsigned int, State> create_all_states() {
-		unordered_map<unsigned int, State> all_states;
+	static unordered_map<string, State*>* create_all_states() {
+		auto all_states = new unordered_map<string, State*>;
 		// lambda function
 		function<void(const State&, int)> create_from_current = [&](const State& current_state, int player) {
 			for (int r = 0; r<BOARD_DIM; r++) {
 				for (int c = 0; c<BOARD_DIM; c++) {
 					if (current_state.value(r, c) == BlankCell) {
 						auto next_hash_value = State::next_state_hash(current_state, r, c, player);
-						if (all_states.find(next_hash_value) != all_states.end()) continue;
-						if (all_states.size() % 100 == 0) cout << "# of States = " << all_states.size() << endl;
+						if (all_states->find(next_hash_value) != all_states->end()) continue;
+						if (all_states->size() % 100 == 0) cout << "# of States = " << all_states->size() << endl;
 						auto next_state = State::create_next(current_state, r, c, player);
-						auto done_win = State::check_done_win(next_state);
-						next_state.done(done_win.first);
-						next_state.win(done_win.second);
-						all_states[next_hash_value] = move(next_state);
-						const auto &next_state_ref = all_states[next_hash_value];
-						if (!next_state_ref.done()) create_from_current(next_state_ref, -player);
+						auto done_win = State::check_done_win(*next_state);
+						next_state->done(done_win.first);
+						next_state->win(done_win.second);
+						(*all_states)[next_hash_value] = next_state;
+						if (!next_state->done()) create_from_current(*next_state, -player);
 					}
 				}
 			}
 		};
-		State init_state(vector<int>(BOARD_SIZE, BlankCell));
-		initial_state_hash = init_state.hash();
-		all_states[initial_state_hash] = move(init_state);
-		create_from_current(all_states[initial_state_hash], PlayerX);
+		State* init_state = new State(vector<int>(BOARD_SIZE, BlankCell));
+		initial_state_hash = init_state->hash();
+		(*all_states)[initial_state_hash] = init_state;
+		create_from_current(*init_state, PlayerX);
 
 		cout << "==================================================================" << endl;
-		cout << "Total # of states =" << all_states.size() << endl;
+		cout << "Total # of states =" << all_states->size() << endl;
 		return all_states;
 	}
 };
@@ -148,24 +150,24 @@ public:
 	virtual void state(const State* pstate) = 0;
 	virtual void reward(double r) = 0;
 	virtual vector<int> action() = 0;
-	virtual unordered_map<unsigned int, double> value_table() const = 0;
-	virtual void value_table(const unordered_map<unsigned int, double>& vtable) = 0;
+	virtual unordered_map<string, double> value_table() const = 0;
+	virtual void value_table(const unordered_map<string, double>& vtable) = 0;
 };
 
 class AIPlayer : public Player {
 private:
 	int role_; // X or O
-	unordered_map<unsigned int, State>* all_states_ptr_;
-	unordered_map<unsigned int, double> value_table_; //[state hash, state value]
+	unordered_map<string, State*>* all_states_ptr_;
+	unordered_map<string, double> value_table_; //[state hash, state value]
 	double step_size_;
 	double explore_rate_;
 	vector<const State*> state_ptrs_;
 	uniform_real_distribution<double> unif_real_;
 public:
-	AIPlayer(int arole, unordered_map<unsigned int, State>* all_states, double step_size = 0.1, double explore_rate = 0.1)
+	AIPlayer(int arole, unordered_map<string, State*>* all_states, double step_size = 0.1, double explore_rate = 0.1)
 		:step_size_(step_size), explore_rate_(explore_rate), all_states_ptr_(all_states) {
 		role(arole);
-		unif_real_.param(uniform_real_distribution<double>::param_type(0.0,1.0));
+		unif_real_.param(uniform_real_distribution<double>::param_type(0.0, 1.0));
 	}
 	void reset() { state_ptrs_.clear(); }
 	int role() { return role_; }
@@ -174,8 +176,8 @@ public:
 		role_ = role;
 		// initialize value table
 		for (auto &kv : *all_states_ptr_) {
-			if (kv.second.done())
-				value_table_[kv.first] = kv.second.win() == role_ ? 1 : 0;
+			if (kv.second->done())
+				value_table_[kv.first] = kv.second->win() == role_ ? 1 : 0;
 			else
 				value_table_[kv.first] = 0.5;
 		}
@@ -202,7 +204,7 @@ public:
 			for (int c = 0; c<BOARD_DIM; c++) {
 				if (latest_state->value(r, c) == BlankCell) {
 					auto hash_value = State::next_state_hash(*latest_state, r, c, role_);
-					possible_state_ptrs.push_back(&((*all_states_ptr_)[hash_value]));
+					possible_state_ptrs.push_back((*all_states_ptr_)[hash_value]);
 					possible_positions.push_back(make_pair(r, c));
 				}
 			}
@@ -228,8 +230,8 @@ public:
 		}
 		return vector<int>({ possible_positions[max_pos].first,possible_positions[max_pos].second,role_ });
 	}
-	unordered_map<unsigned int, double> value_table() const { return value_table_; }
-	void value_table(const unordered_map<unsigned int, double>& vtable) { value_table_ = vtable; }
+	unordered_map<string, double> value_table() const { return value_table_; }
+	void value_table(const unordered_map<string, double>& vtable) { value_table_ = vtable; }
 };
 
 class HumanPlayer : public Player {
@@ -253,24 +255,24 @@ public:
 		auto rc = State::pos2rowcol(pos);
 		return vector<int>({ rc.first,rc.second,role_ });
 	}
-	unordered_map<unsigned int, double> value_table() const { return unordered_map<unsigned int, double>(); }
-	void value_table(const unordered_map<unsigned int, double>& vtable) { }
+	unordered_map<string, double> value_table() const { return unordered_map<string, double>(); }
+	void value_table(const unordered_map<string, double>& vtable) { }
 };
 
 // Judge
 class Judge {
 private:
-	Player* player1_;
+	Player * player1_;
 	Player* player2_;
 	Player* current_player_;
 	bool feedback_;
 	const State* current_state_;
-	unordered_map<unsigned int, State>* all_states_ptr_;
+	unordered_map<string, State*>* all_states_ptr_;
 public:
-	Judge(unordered_map<unsigned int, State>* all_states, Player* player1, Player* player2, bool feedback = true)
+	Judge(unordered_map<string, State*>* all_states, Player* player1, Player* player2, bool feedback = true)
 		:all_states_ptr_(all_states), player1_(player1), player2_(player2), feedback_(feedback), current_player_(nullptr)
 	{
-		current_state_ = &((*all_states_ptr_)[initial_state_hash]);
+		current_state_ = (*all_states_ptr_)[initial_state_hash];
 	}
 	void reward()
 	{
@@ -297,7 +299,7 @@ public:
 		player1_->reset();
 		player2_->reset();
 		current_player_ = nullptr;
-		current_state_ = &((*all_states_ptr_)[initial_state_hash]);
+		current_state_ = (*all_states_ptr_)[initial_state_hash];
 	}
 	int play(bool show = false)
 	{
@@ -307,7 +309,8 @@ public:
 			current_player_ = current_player_ == player1_ ? player2_ : player1_;
 			if (show) cout << *current_state_;
 			auto action = current_player_->action();
-			current_state_ = &((*all_states_ptr_)[State::next_state_hash(*current_state_, action[0], action[1], action[2])]);
+			auto next_hash = State::next_state_hash(*current_state_, action[0], action[1], action[2]);
+			current_state_ = (*all_states_ptr_)[next_hash];
 			feed_current_state();
 			if (current_state_->done()) {
 				if (feedback_) reward();
@@ -320,14 +323,20 @@ public:
 class TicTacToe
 {
 private:
-	unordered_map<unsigned int, State> all_states_;
-	unordered_map<int, unordered_map<unsigned int, double> > value_tables; //[player role, [state hash, estimated value]]
+	unordered_map<string, State*>* all_states_=NULL;
+	unordered_map<int, unordered_map<string, double> > value_tables; //[player role, [state hash, estimated value]]
 public:
 	TicTacToe() { all_states_ = State::create_all_states(); }
+	~TicTacToe() {
+		if (all_states_ != NULL) {
+			for (auto kv : *all_states_) if (kv.second != NULL) delete kv.second;
+			delete all_states_;
+		}
+	}
 	void train(int epochs = 20000)
 	{
-		AIPlayer player1(PlayerX, &all_states_), player2(PlayerO, &all_states_);
-		Judge judge(&all_states_, &player1, &player2);
+		AIPlayer player1(PlayerX, all_states_), player2(PlayerO, all_states_);
+		Judge judge(all_states_, &player1, &player2);
 		double player1_win = 0, player2_win = 0;
 		for (int i = 0; i<epochs; i++) {
 			if (i % 100 == 0) cout << "Epoch " << i << ": " << endl;
@@ -343,8 +352,8 @@ public:
 	}
 	void compete(int turns = 500)
 	{
-		AIPlayer player1(PlayerX, &all_states_, 0.1, 0), player2(PlayerO, &all_states_, 0.1, 0);
-		Judge judge(&all_states_, &player1, &player2, false);
+		AIPlayer player1(PlayerX, all_states_, 0.1, 0), player2(PlayerO, all_states_, 0.1, 0);
+		Judge judge(all_states_, &player1, &player2, false);
 		player1.value_table(value_tables[player1.role()]);
 		player2.value_table(value_tables[player2.role()]);
 		double player1_win = 0, player2_win = 0;
@@ -361,9 +370,9 @@ public:
 	void play()
 	{
 		while (true) {
-			AIPlayer ai_player(PlayerX, &all_states_, 0.1, 0);
+			AIPlayer ai_player(PlayerX, all_states_, 0.1, 0);
 			HumanPlayer man_player(PlayerO);
-			Judge judge(&all_states_, &ai_player, &man_player, false);
+			Judge judge(all_states_, &ai_player, &man_player, false);
 			ai_player.value_table(value_tables[ai_player.role()]);
 			int winner = judge.play(true);
 			if (winner == ai_player.role()) cout << " Lose !" << endl;
