@@ -37,7 +37,14 @@ public:
 	}
 	static string hash(const vector<int>& vec) {
 		string seed;
-		for (auto &x : vec) seed.push_back(x + 1 + '0');
+		int cnt = 0;
+		char c = 0;
+		for (auto &x : vec) {
+			c = (c<<2) + (char)(x+1);
+			cnt = (cnt+1)%4;
+			if (cnt==0)	{seed.push_back(c); c=0;}
+		}
+		if (cnt>0) seed.push_back(c);
 		return seed;
 	}
 	inline bool done() const { return done_; }
